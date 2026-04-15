@@ -12,12 +12,17 @@ fi
 if [ -n "$HTTP_AUTH_USER" ] && [ -n "$HTTP_AUTH_PASS" ]; then
     htpasswd -cb /etc/apache2/.htpasswd "$HTTP_AUTH_USER" "$HTTP_AUTH_PASS"
     cat > /etc/apache2/app-auth.conf <<'AUTHEOF'
-AuthType Basic
-AuthName "Restricted Access"
-AuthUserFile /etc/apache2/.htpasswd
-Require valid-user
+<If "%{REQUEST_URI} =~ m#^/api/#">
+    Require all granted
+</If>
+<Else>
+    AuthType Basic
+    AuthName "Restricted Access"
+    AuthUserFile /etc/apache2/.htpasswd
+    Require valid-user
+</Else>
 AUTHEOF
-    echo "HTTP Basic Auth enabled for user: $HTTP_AUTH_USER"
+    echo "HTTP Basic Auth enabled for user: $HTTP_AUTH_USER (API excluded)"
 else
     echo "Require all granted" > /etc/apache2/app-auth.conf
     echo "HTTP Basic Auth disabled (no HTTP_AUTH_USER/HTTP_AUTH_PASS set)"

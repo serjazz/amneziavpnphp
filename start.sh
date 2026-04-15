@@ -12,16 +12,14 @@ fi
 if [ -n "$HTTP_AUTH_USER" ] && [ -n "$HTTP_AUTH_PASS" ]; then
     htpasswd -cb /etc/apache2/.htpasswd "$HTTP_AUTH_USER" "$HTTP_AUTH_PASS"
     cat > /etc/apache2/app-auth.conf <<'AUTHEOF'
-<LocationMatch "^/(?!api/)">
-    AuthType Basic
-    AuthName "Restricted Access"
-    AuthUserFile /etc/apache2/.htpasswd
-    Require valid-user
-</LocationMatch>
+AuthType Basic
+AuthName "Restricted Access"
+AuthUserFile /etc/apache2/.htpasswd
+Require valid-user
 AUTHEOF
-    echo "HTTP Basic Auth enabled for user: $HTTP_AUTH_USER (API excluded)"
+    echo "HTTP Basic Auth enabled for user: $HTTP_AUTH_USER"
 else
-    echo -n > /etc/apache2/app-auth.conf
+    echo "Require all granted" > /etc/apache2/app-auth.conf
     echo "HTTP Basic Auth disabled (no HTTP_AUTH_USER/HTTP_AUTH_PASS set)"
 fi
 

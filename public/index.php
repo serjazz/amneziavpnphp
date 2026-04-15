@@ -1164,7 +1164,18 @@ Router::get('/clients/{id}', function ($params) {
         } catch (Exception $e) {
             $protocolOutput = '';
         }
-        View::render('clients/view.twig', ['client' => $clientData, 'protocol_output' => $protocolOutput]);
+        $amneziaLink = '';
+        try {
+            $amneziaLink = $client->getAmneziaLink();
+        } catch (Throwable $e) {
+            error_log('Failed to generate Amnezia link: ' . $e->getMessage());
+        }
+
+        View::render('clients/view.twig', [
+            'client' => $clientData,
+            'protocol_output' => $protocolOutput,
+            'amnezia_link' => $amneziaLink,
+        ]);
     } catch (Exception $e) {
         http_response_code(404);
         echo 'Client not found';

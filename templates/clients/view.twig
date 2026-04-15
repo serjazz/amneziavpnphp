@@ -144,11 +144,28 @@
     </div>
   </div>
   
-  {% if client.qr_code %}
+  {% if client.qr_code or amnezia_link %}
   <div class="bg-white rounded shadow p-6 text-center">
+    {% if client.qr_code %}
     <h3 class="font-bold mb-4">QR Code</h3>
     <img src="{{ client.qr_code }}" alt="QR Code" class="mx-auto" style="max-width: 300px; width: 100%; height: auto;">
     <p class="text-sm text-gray-600 mt-2">Scan with Amnezia VPN app</p>
+    {% endif %}
+
+    {% if amnezia_link %}
+    <div class="{% if client.qr_code %}mt-6 pt-6 border-t{% endif %}">
+      <h3 class="font-bold mb-3">Amnezia Connection Key</h3>
+      <div class="flex items-center gap-2 max-w-2xl mx-auto">
+        <input type="text" id="amneziaLink" value="{{ amnezia_link }}" readonly
+          class="w-full px-3 py-2 border rounded text-xs font-mono bg-gray-50 truncate">
+        <button onclick="copyAmneziaLink()" id="copyBtn"
+          class="gradient-bg text-white px-4 py-2 rounded whitespace-nowrap">
+          <i class="fas fa-copy"></i> Copy
+        </button>
+      </div>
+      <p class="text-sm text-gray-500 mt-2">Paste this key in Amnezia app → Add connection → Paste key</p>
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -161,6 +178,20 @@
 </div>
 
 <script>
+function copyAmneziaLink() {
+  const input = document.getElementById('amneziaLink');
+  const btn = document.getElementById('copyBtn');
+  navigator.clipboard.writeText(input.value).then(function() {
+    btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+    setTimeout(function() { btn.innerHTML = '<i class="fas fa-copy"></i> Copy'; }, 2000);
+  }).catch(function() {
+    input.select();
+    document.execCommand('copy');
+    btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+    setTimeout(function() { btn.innerHTML = '<i class="fas fa-copy"></i> Copy'; }, 2000);
+  });
+}
+
 function toggleExpirationEdit() {
   const select = document.getElementById('expirationSelect');
   const input = document.getElementById('expirationSeconds');

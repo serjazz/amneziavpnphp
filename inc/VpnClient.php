@@ -1647,6 +1647,48 @@ class VpnClient
     }
 
     /**
+     * Generate vpn:// link for Amnezia Client app import
+     */
+    public function getAmneziaLink(): string
+    {
+        require_once __DIR__ . '/QrUtil.php';
+
+        $config = $this->getConfig();
+        if ($config === '') {
+            return '';
+        }
+
+        try {
+            if (strpos($config, 'vless://') === 0) {
+                $parsed = parse_url($config);
+                $host = $parsed['host'] ?? '';
+                $port = (int) ($parsed['port'] ?? 443);
+                $clientId = ltrim($parsed['path'] ?? '', '/');
+                $fragment = isset($parsed['fragment']) ? urldecode($parsed['fragment']) : '';
+                parse_str($parsed['query'] ?? '', $query);
+                $flow = $query['flow'] ?? '';
+                $reality = null;
+                if (($query['security'] ?? '') === 'reality') {
+                    $reality = [
+                        'publicKey' => $query['pbk'] ?? '',
+                        'serverName' => $query['sni'] ?? '',
+                        'shortId' => $query['sid'] ?? '',
+                        'fingerprint' => $query['fp'] ?? 'chrome',
+                    ];
+                }
+                $payload = QrUtil::encodeXrayPayload($host, $port, $clientId, $fragment, $reality, $config, $flow);
+            } else {
+                $payload = QrUtil::encodeOldPayloadFromConf($config);
+            }
+
+            return 'vpn://' . $payload;
+        } catch (Throwable $e) {
+            error_log('Failed to generate Amnezia link: ' . $e->getMessage());
+            return '';
+        }
+    }
+
+    /**
      * Get XRay client stats
      */
     private static function getXrayStats(array $serverData, string $clientId): array

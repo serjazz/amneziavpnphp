@@ -18,6 +18,7 @@ Web-based management panel for Amnezia AWG (WireGuard) VPN servers.
 - Multi-language interface (English, Russian, Spanish, German, French, Chinese)
 - REST API with JWT authentication
 - User authentication and access control
+- **HTTP Basic Auth** for additional panel protection (optional)
 - **Automatic client expiration and traffic limit checks** via cron
 
 ## Available Protocols
@@ -43,7 +44,7 @@ Web-based management panel for Amnezia AWG (WireGuard) VPN servers.
 ```bash
 git clone https://github.com/infosave2007/amneziavpnphp.git
 cd amneziavpnphp
-cp .env.example .env
+cp .env.production.example .env
 
 # For Docker Compose V2 (recommended)
 docker compose up -d
@@ -111,6 +112,10 @@ ADMIN_EMAIL=admin@amnez.ia
 ADMIN_PASSWORD=admin123
 
 JWT_SECRET=your-secret-key-change-this
+
+# HTTP Basic Auth (leave empty to disable)
+HTTP_AUTH_USER=admin
+HTTP_AUTH_PASS=your-strong-password
 ```
 
 ## Usage
@@ -379,6 +384,10 @@ inc/                  - Core classes
 templates/           - Twig templates
 migrations/          - SQL migrations (executed in alphabetical order)
 ```
+
+## Production Deployment
+
+For step-by-step production deployment guide (e.g. alongside Amnezia VPN on a VPS), see [DEPLOY.md](DEPLOY.md).
 
 ## Tech Stack
 

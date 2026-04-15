@@ -2123,6 +2123,13 @@ Router::get('/api/clients/{id}/details', function ($params) {
         $clientData = $client->getData();
         $stats = $client->getFormattedStats();
 
+        $amneziaLink = '';
+        try {
+            $amneziaLink = $client->getAmneziaLink();
+        } catch (Throwable $e) {
+            error_log('API client_details: getAmneziaLink failed: ' . $e->getMessage());
+        }
+
         echo json_encode([
             'success' => true,
             'client' => [
@@ -2138,6 +2145,7 @@ Router::get('/api/clients/{id}/details', function ($params) {
                 'last_handshake' => $clientData['last_handshake'],
                 'config' => $clientData['config'],
                 'qr_code' => $clientData['qr_code'],
+                'amnezia_link' => $amneziaLink,
             ]
         ]);
     } catch (Exception $e) {
@@ -3327,7 +3335,13 @@ Router::post('/api/clients/create', function () {
 
         $clientData = $client->getData();
 
-        // Return client data with config and QR code
+        $amneziaLink = '';
+        try {
+            $amneziaLink = $client->getAmneziaLink();
+        } catch (Throwable $e) {
+            error_log('API create_client: getAmneziaLink failed: ' . $e->getMessage());
+        }
+
         echo json_encode([
             'success' => true,
             'client' => [
@@ -3340,6 +3354,7 @@ Router::post('/api/clients/create', function () {
                 'created_at' => $clientData['created_at'],
                 'config' => $clientData['config'],
                 'qr_code' => $clientData['qr_code'],
+                'amnezia_link' => $amneziaLink,
             ]
         ]);
     } catch (Exception $e) {

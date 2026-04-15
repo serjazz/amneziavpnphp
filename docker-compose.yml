@@ -49,6 +49,9 @@ services:
       - ./:/var/www/html
     ports:
       - "8082:80"
+    networks:
+      - default
+      - amnezia-shared
 
   dind:
     image: docker:24-dind
@@ -64,3 +67,7 @@ services:
 volumes:
   db_data:
   dind_data:
+
+networks:
+  amnezia-shared:
+    name: amnezia-shared

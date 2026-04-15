@@ -32,6 +32,9 @@ test_qr.svg
 *.swo
 *~
 
+# Telegram bot (separate git repo)
+telegram-bot/
+
 # Local tooling / scratch
 .trae/
 scripts/_cycle_out/

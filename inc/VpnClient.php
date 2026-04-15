@@ -750,7 +750,7 @@ class VpnClient
             $containerName = $serverData['container_name'] ?? 'amnezia-awg';
             $server = new VpnServer($serverData['id']);
             $cmd = sprintf(
-                "docker exec %s cat /opt/amnezia/awg/wg0.conf 2>/dev/null",
+                "docker exec %s sh -c 'cat /opt/amnezia/awg/wg0.conf /opt/amnezia/awg/awg0.conf 2>/dev/null || true'",
                 escapeshellarg($containerName)
             );
             $serverConfig = $server->executeCommand($cmd, true);
@@ -800,9 +800,9 @@ class VpnClient
             if ($line === '') {
                 continue;
             }
-            if (preg_match('/^(Jc|Jmin|Jmax|S1|S2|S3|S4|H1|H2|H3|H4)\s*=\s*(\d+)\s*$/i', $line, $m)) {
+            if (preg_match('/^(Jc|Jmin|Jmax|S1|S2|S3|S4|H1|H2|H3|H4)\s*=\s*(\d+(?:-\d+)?)\s*$/i', $line, $m)) {
                 $k = strtoupper($m[1]);
-                $awgParams[$k] = (int) $m[2];
+                $awgParams[$k] = strpos($m[2], '-') !== false ? $m[2] : (int) $m[2];
             }
         }
 
@@ -853,12 +853,12 @@ class VpnClient
         $primaryConfigDir = $protocolSlug === 'awg2' ? '/opt/amnezia/awg2' : '/opt/amnezia/awg';
 
         try {
-            // Try to get public key from wg show
-            $pubKeyCmd = "docker exec $containerName wg show wg0 2>/dev/null | grep 'public key:' | awk '{print \$3}'";
+            // Try to get public key from wg/awg show
+            $pubKeyCmd = "docker exec $containerName sh -c 'wg show wg0 2>/dev/null || awg show awg0 2>/dev/null' | grep 'public key:' | awk '{print \$3}'";
             $pubKey = trim($server->executeCommand($pubKeyCmd, true));
 
             // Get listening port
-            $portCmd = "docker exec $containerName wg show wg0 2>/dev/null | grep 'listening port:' | awk '{print \$3}'";
+            $portCmd = "docker exec $containerName sh -c 'wg show wg0 2>/dev/null || awg show awg0 2>/dev/null' | grep 'listening port:' | awk '{print \$3}'";
             $port = trim($server->executeCommand($portCmd, true));
 
             // PresharedKey is stored per-peer, and in this project we persist it in wireguard_psk.key.
@@ -869,32 +869,31 @@ class VpnClient
             $psk = trim($server->executeCommand($pskKeyFileCmd, true));
 
             if ($psk === '') {
-                $pskFromConfCmd = "docker exec $containerName sh -c \"grep -E '^[[:space:]]*PresharedKey[[:space:]]*=' $primaryConfigDir/wg0.conf 2>/dev/null | head -1 | sed -E 's/^[[:space:]]*PresharedKey[[:space:]]*=[[:space:]]*//' | tr -d '\\r'\" 2>/dev/null || true";
+                $pskFromConfCmd = "docker exec $containerName sh -c \"grep -E '^[[:space:]]*PresharedKey[[:space:]]*=' $primaryConfigDir/wg0.conf $primaryConfigDir/awg0.conf 2>/dev/null | head -1 | sed -E 's/^[[:space:]]*PresharedKey[[:space:]]*=[[:space:]]*//' | tr -d '\\r'\" 2>/dev/null || true";
                 $psk = trim($server->executeCommand($pskFromConfCmd, true));
             }
 
             if ($psk === '' && $primaryConfigDir !== '/opt/amnezia/awg') {
-                $pskFromAwgConfCmd = "docker exec $containerName sh -c \"grep -E '^[[:space:]]*PresharedKey[[:space:]]*=' /opt/amnezia/awg/wg0.conf 2>/dev/null | head -1 | sed -E 's/^[[:space:]]*PresharedKey[[:space:]]*=[[:space:]]*//' | tr -d '\\r'\" 2>/dev/null || true";
+                $pskFromAwgConfCmd = "docker exec $containerName sh -c \"grep -E '^[[:space:]]*PresharedKey[[:space:]]*=' /opt/amnezia/awg/wg0.conf /opt/amnezia/awg/awg0.conf 2>/dev/null | head -1 | sed -E 's/^[[:space:]]*PresharedKey[[:space:]]*=[[:space:]]*//' | tr -d '\\r'\" 2>/dev/null || true";
                 $psk = trim($server->executeCommand($pskFromAwgConfCmd, true));
             }
 
             if ($psk === '') {
-                $pskFromAltConfCmd = "docker exec $containerName sh -c \"grep -E '^[[:space:]]*PresharedKey[[:space:]]*=' /etc/wireguard/wg0.conf 2>/dev/null | head -1 | sed -E 's/^[[:space:]]*PresharedKey[[:space:]]*=[[:space:]]*//' | tr -d '\\r'\" 2>/dev/null || true";
+                $pskFromAltConfCmd = "docker exec $containerName sh -c \"grep -E '^[[:space:]]*PresharedKey[[:space:]]*=' /etc/wireguard/wg0.conf /etc/wireguard/awg0.conf 2>/dev/null | head -1 | sed -E 's/^[[:space:]]*PresharedKey[[:space:]]*=[[:space:]]*//' | tr -d '\\r'\" 2>/dev/null || true";
                 $psk = trim($server->executeCommand($pskFromAltConfCmd, true));
             }
 
             // Extract DNS from config
-            $dnsCmd = "docker exec $containerName sh -c \"grep -E '^DNS' $primaryConfigDir/wg0.conf 2>/dev/null | head -1 | cut -d= -f2 | tr -d '[:space:]'\" 2>/dev/null || echo ''";
+            $dnsCmd = "docker exec $containerName sh -c \"grep -E '^DNS' $primaryConfigDir/wg0.conf $primaryConfigDir/awg0.conf 2>/dev/null | head -1 | cut -d= -f2 | tr -d '[:space:]'\" 2>/dev/null || echo ''";
             $dns = trim($server->executeCommand($dnsCmd, true));
 
             if (empty($dns) && $primaryConfigDir !== '/opt/amnezia/awg') {
-                $dnsAwgCmd = "docker exec $containerName sh -c \"grep -E '^DNS' /opt/amnezia/awg/wg0.conf 2>/dev/null | head -1 | cut -d= -f2 | tr -d '[:space:]'\" 2>/dev/null || echo ''";
+                $dnsAwgCmd = "docker exec $containerName sh -c \"grep -E '^DNS' /opt/amnezia/awg/wg0.conf /opt/amnezia/awg/awg0.conf 2>/dev/null | head -1 | cut -d= -f2 | tr -d '[:space:]'\" 2>/dev/null || echo ''";
                 $dns = trim($server->executeCommand($dnsAwgCmd, true));
             }
 
             if (empty($dns)) {
-                // Try alternative config location
-                $dnsCmd2 = "docker exec $containerName sh -c \"grep -E '^DNS' /etc/wireguard/wg0.conf 2>/dev/null | head -1 | cut -d= -f2 | tr -d '[:space:]'\" 2>/dev/null || echo ''";
+                $dnsCmd2 = "docker exec $containerName sh -c \"grep -E '^DNS' /etc/wireguard/wg0.conf /etc/wireguard/awg0.conf 2>/dev/null | head -1 | cut -d= -f2 | tr -d '[:space:]'\" 2>/dev/null || echo ''";
                 $dns = trim($server->executeCommand($dnsCmd2, true));
             }
 
@@ -908,24 +907,32 @@ class VpnClient
             // so we primarily read them from /opt/amnezia/awg/wg0.conf.
             $awgParams = [];
 
-            // Legacy attempt: some builds print jc/jmin/... in `wg show` output.
-            $wgShowCmd = "docker exec $containerName wg show wg0 2>/dev/null";
+            $wgShowCmd = "docker exec $containerName sh -c 'wg show wg0 2>/dev/null || awg show awg0 2>/dev/null'";
             $wgOutput = (string) $server->executeCommand($wgShowCmd, true);
             $paramNames = ['jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4', 'h1', 'h2', 'h3', 'h4'];
             foreach ($paramNames as $param) {
-                if (preg_match('/^\s*' . preg_quote($param, '/') . ':\s*(\d+)/mi', $wgOutput, $matches)) {
-                    $awgParams[strtoupper($param)] = (int) $matches[1];
+                if (preg_match('/^\s*' . preg_quote($param, '/') . ':\s*(\d+(?:-\d+)?)/mi', $wgOutput, $matches)) {
+                    $awgParams[strtoupper($param)] = strpos($matches[1], '-') !== false ? $matches[1] : (int) $matches[1];
                 }
             }
 
-            // Primary source: wg0.conf
             if (empty($awgParams)) {
-                $awgParams = self::extractAwgParamsFromWg0Conf($server, $containerName, $primaryConfigDir . '/wg0.conf');
-                if (empty($awgParams) && $primaryConfigDir !== '/opt/amnezia/awg') {
-                    $awgParams = self::extractAwgParamsFromWg0Conf($server, $containerName, '/opt/amnezia/awg/wg0.conf');
+                $configPaths = [
+                    $primaryConfigDir . '/wg0.conf',
+                    $primaryConfigDir . '/awg0.conf',
+                ];
+                if ($primaryConfigDir !== '/opt/amnezia/awg') {
+                    $configPaths[] = '/opt/amnezia/awg/wg0.conf';
+                    $configPaths[] = '/opt/amnezia/awg/awg0.conf';
                 }
-                if (empty($awgParams)) {
-                    $awgParams = self::extractAwgParamsFromWg0Conf($server, $containerName, '/etc/wireguard/wg0.conf');
+                $configPaths[] = '/etc/wireguard/wg0.conf';
+                $configPaths[] = '/etc/wireguard/awg0.conf';
+
+                foreach ($configPaths as $path) {
+                    $awgParams = self::extractAwgParamsFromWg0Conf($server, $containerName, $path);
+                    if (!empty($awgParams)) {
+                        break;
+                    }
                 }
             }
 
@@ -1504,9 +1511,23 @@ class VpnClient
             if ($missing) {
                 $containerName = $serverData['container_name'] ?? ($slug === 'awg2' ? 'amnezia-awg2' : 'amnezia-awg');
                 $configDir = $slug === 'awg2' ? '/opt/amnezia/awg2' : '/opt/amnezia/awg';
-                $direct = self::extractAwgParamsFromWg0Conf($server, $containerName, $configDir . '/wg0.conf');
-                if (empty($direct)) {
-                    $direct = self::extractAwgParamsFromWg0Conf($server, $containerName, '/etc/wireguard/wg0.conf');
+                $configPaths = [
+                    $configDir . '/wg0.conf',
+                    $configDir . '/awg0.conf',
+                ];
+                if ($configDir !== '/opt/amnezia/awg') {
+                    $configPaths[] = '/opt/amnezia/awg/wg0.conf';
+                    $configPaths[] = '/opt/amnezia/awg/awg0.conf';
+                }
+                $configPaths[] = '/etc/wireguard/wg0.conf';
+                $configPaths[] = '/etc/wireguard/awg0.conf';
+
+                $direct = [];
+                foreach ($configPaths as $path) {
+                    $direct = self::extractAwgParamsFromWg0Conf($server, $containerName, $path);
+                    if (!empty($direct)) {
+                        break;
+                    }
                 }
 
                 if (!empty($direct)) {

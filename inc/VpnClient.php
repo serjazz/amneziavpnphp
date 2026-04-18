@@ -195,7 +195,7 @@ class VpnClient
             }
 
             self::addClientToServer($serverData, $keys['public'], $clientIP);
-            $qrCode = self::generateQRCode($config);
+            $qrCode = self::generateQRCode($config, $slug);
             $priv = $keys['private'];
             $pub = $keys['public'];
             $psk = $serverData['preshared_key'];
@@ -501,7 +501,7 @@ class VpnClient
                 $vars['last_config_json'] = json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
             }
 
-            $qrCode = self::generateQRCode($config);
+            $qrCode = self::generateQRCode($config, $slug);
 
             $priv = '';
             $pub = '';
@@ -654,7 +654,8 @@ class VpnClient
             $vars['last_config_json'] = json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
         }
 
-        $qrCode = $config !== '' ? self::generateQRCode($config) : '';
+        $slugForQr = is_array($protocol) && !empty($protocol['slug']) ? (string) $protocol['slug'] : ($serverData['install_protocol'] ?? null);
+        $qrCode = $config !== '' ? self::generateQRCode($config, $slugForQr) : '';
         $status = strtolower($clientData['status'] ?? 'active') === 'disabled' ? 'disabled' : 'active';
 
         $expiresAt = $clientData['expires_at'] ?? null;
@@ -1129,7 +1130,7 @@ class VpnClient
      * Generate QR code for configuration using Amnezia format
      * Uses working QrUtil from /Users/oleg/Documents/amnezia
      */
-    private static function generateQRCode(string $config): string
+    private static function generateQRCode(string $config, ?string $protocolSlug = null): string
     {
         require_once __DIR__ . '/QrUtil.php';
 
@@ -1164,9 +1165,8 @@ class VpnClient
                 }
             }
 
-            // Fallback for WireGuard / default
-            // Use old Amnezia format with Qt/QDataStream encoding
-            $payloadOld = QrUtil::encodeOldPayloadFromConf($config);
+            // Fallback for WireGuard / default (Qt qCompress + JSON; container id from protocol slug)
+            $payloadOld = QrUtil::encodeOldPayloadFromConf($config, $protocolSlug);
             $dataUri = QrUtil::pngBase64($payloadOld);
             return $dataUri;
         } catch (Throwable $e) {
@@ -1439,6 +1439,34 @@ class VpnClient
     }
 
     /**
+     * Slug of the client's protocol (e.g. awg2) for Amnezia vpn:// envelope (container id must match server stack).
+     */
+    private function getProtocolSlugForExport(): ?string
+    {
+        if (!empty($this->data['protocol_id'])) {
+            try {
+                $pdo = DB::conn();
+                $stmt = $pdo->prepare('SELECT slug FROM protocols WHERE id = ? LIMIT 1');
+                $stmt->execute([(int) $this->data['protocol_id']]);
+                $slug = $stmt->fetchColumn();
+                if (is_string($slug) && $slug !== '') {
+                    return $slug;
+                }
+            } catch (Throwable $e) {
+            }
+        }
+        try {
+            $server = new VpnServer((int) ($this->data['server_id'] ?? 0));
+            $sd = $server->getData();
+            if ($sd && !empty($sd['install_protocol'])) {
+                return (string) $sd['install_protocol'];
+            }
+        } catch (Throwable $e) {
+        }
+        return null;
+    }
+
+    /**
      * Regenerate and persist client configuration using current server container data.
      * Useful when server was reinstalled/recreated and AWG params/keys changed.
      */
@@ -1619,7 +1647,7 @@ class VpnClient
             );
         }
 
-        $qrCode = self::generateQRCode($config);
+        $qrCode = self::generateQRCode($config, $slug);
 
         $pdo = DB::conn();
         $stmt = $pdo->prepare('UPDATE vpn_clients SET config = ?, qr_code = ?, preshared_key = ? WHERE id = ?');
@@ -1682,7 +1710,7 @@ class VpnClient
                 }
                 $payload = QrUtil::encodeXrayPayload($host, $port, $clientId, $fragment, $reality, $config, $flow);
             } else {
-                $payload = QrUtil::encodeOldPayloadFromConf($config);
+                $payload = QrUtil::encodeOldPayloadFromConf($config, $this->getProtocolSlugForExport());
             }
 
             // Paste expects vpn:// + same base64url payload as in QR (Qt qCompress format).

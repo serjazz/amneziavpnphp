@@ -74,9 +74,12 @@ class QrUtil
         return self::urlsafe_b64_encode($header . $compressed);
     }
 
-    public static function encodeOldPayloadFromConf(string $confText): string
+    /**
+     * @param string|null $protocolSlug e.g. awg2 → amnezia-awg2 in JSON (must match Amnezia Client + server stack)
+     */
+    public static function encodeOldPayloadFromConf(string $confText, ?string $protocolSlug = null): string
     {
-        $payload = self::buildOldEnvelopeFromConf($confText);
+        $payload = self::buildOldEnvelopeFromConf($confText, $protocolSlug);
         return self::encodeOldPayloadFromJson(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
     }
 
@@ -253,7 +256,7 @@ class QrUtil
         return $vars;
     }
 
-    private static function buildOldEnvelopeFromConf(string $conf): array
+    private static function buildOldEnvelopeFromConf(string $conf, ?string $protocolSlug = null): array
     {
         $endpointHost = null;
         $endpointPort = null;
@@ -378,11 +381,16 @@ class QrUtil
 
         $serverDesc = self::resolveServerDescription($endpointHost);
 
+        // Amnezia Client maps DockerContainer::… to "amnezia-<name>". AWG2 stack (amnezia-awg2 container on server)
+        // must use amnezia-awg2 here; amnezia-awg targets the older AmneziaWG path and can fail to connect.
+        $slug = $protocolSlug ?? '';
+        $clientContainer = ($slug === 'awg2') ? 'amnezia-awg2' : 'amnezia-awg';
+
         // Envelope with keys ordered like variant 1: containers first
         $envelope = [
             'containers' => [
                 [
-                    // awg first, then container (as in the working QR)
+                    // Proto key stays "awg" (Amnezia Proto::Awg); container id selects AWG vs AWG2 install.
                     'awg' => [
                         'H1' => (string) ($params['H1'] ?? ''),
                         'H2' => (string) ($params['H2'] ?? ''),
@@ -399,14 +407,15 @@ class QrUtil
                         'port' => (string) $endpointPort,
                         'transport_proto' => 'udp',
                     ],
-                    'container' => 'amnezia-awg',
+                    'container' => $clientContainer,
                 ],
             ],
-            'defaultContainer' => 'amnezia-awg',
+            'defaultContainer' => $clientContainer,
             'description' => $serverDesc,
             'dns1' => $dns1,
             'dns2' => $dns2,
             'hostName' => $endpointHost,
+            'port' => $endpointPort,
         ];
         return $envelope;
     }

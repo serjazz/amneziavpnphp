@@ -155,15 +155,24 @@
     {% if amnezia_link %}
     <div class="{% if client.qr_code %}mt-6 pt-6 border-t{% endif %}">
       <h3 class="font-bold mb-3">Amnezia Connection Key</h3>
-      <div class="flex items-center gap-2 max-w-2xl mx-auto">
-        <input type="text" id="amneziaLink" value="{{ amnezia_link }}" readonly
-          class="w-full px-3 py-2 border rounded text-xs font-mono bg-gray-50 truncate">
-        <button onclick="copyAmneziaLink()" id="copyBtn"
-          class="gradient-bg text-white px-4 py-2 rounded whitespace-nowrap">
-          <i class="fas fa-copy"></i> Copy
-        </button>
+      <p class="text-sm text-gray-600 mb-3 max-w-2xl mx-auto text-left">
+        In <strong>Amnezia VPN</strong>: Add connection → Paste key. The key must start with <code class="text-xs">vpn://</code>. The QR encodes the same data without the prefix; scanning works the same way.
+      </p>
+      <div class="flex flex-col sm:flex-row items-stretch gap-2 max-w-2xl mx-auto">
+        <textarea id="amneziaLink" readonly rows="4"
+          class="w-full px-3 py-2 border rounded text-xs font-mono bg-gray-50 break-all">{{ amnezia_link }}</textarea>
+        <div class="flex flex-col gap-2 shrink-0">
+          <button type="button" onclick="copyAmneziaLink()" id="copyBtn"
+            class="gradient-bg text-white px-4 py-2 rounded whitespace-nowrap">
+            <i class="fas fa-copy"></i> Copy
+          </button>
+          <button type="button" onclick="downloadAmneziaKey()" id="downloadKeyBtn"
+            class="bg-gray-600 text-white px-4 py-2 rounded whitespace-nowrap text-sm">
+            <i class="fas fa-download"></i> Download .key
+          </button>
+        </div>
       </div>
-      <p class="text-sm text-gray-500 mt-2">Same data as QR (paste as one line). Amnezia app → Add connection → Paste key. If the app asks for a link, add prefix <code class="text-xs">vpn://</code> yourself.</p>
+      <p class="text-sm text-gray-500 mt-2">One line, no spaces or line breaks inside the key. If paste fails, try Download or scan the QR.</p>
     </div>
     {% endif %}
   </div>
@@ -179,13 +188,43 @@
 
 <script>
 function copyAmneziaLink() {
-  var input = document.getElementById('amneziaLink');
+  var ta = document.getElementById('amneziaLink');
   var btn = document.getElementById('copyBtn');
-  input.select();
-  input.setSelectionRange(0, 99999);
-  document.execCommand('copy');
-  btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-  setTimeout(function() { btn.innerHTML = '<i class="fas fa-copy"></i> Copy'; }, 2000);
+  var text = ta.value;
+  function ok() {
+    btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+    setTimeout(function() { btn.innerHTML = '<i class="fas fa-copy"></i> Copy'; }, 2000);
+  }
+  function fallback() {
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    try {
+      document.execCommand('copy');
+      ok();
+    } catch (e) {
+      alert('Copy failed — use Download .key or select the text manually.');
+    }
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(ok).catch(fallback);
+  } else {
+    fallback();
+  }
+}
+
+function downloadAmneziaKey() {
+  var ta = document.getElementById('amneziaLink');
+  var text = ta.value;
+  var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'amnezia-connection.key';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
 }
 
 function toggleExpirationEdit() {

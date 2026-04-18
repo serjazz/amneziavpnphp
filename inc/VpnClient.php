@@ -194,7 +194,7 @@ class VpnClient
                 );
             }
 
-            self::addClientToServer($serverData, $keys['public'], $clientIP);
+            self::addClientToServer($serverData, $keys['public'], $clientIP, $slug);
             $qrCode = self::generateQRCode($config, $slug);
             $priv = $keys['private'];
             $pub = $keys['public'];
@@ -1002,9 +1002,29 @@ class VpnClient
     }
 
     /**
-     * Add client to server using wg set (more reliable than syncconf)
+     * Resolve protocol slug for WireGuard server ops (awg2 needs awg/amneziawg-go, not stock wg/wg-quick).
      */
-    public static function addClientToServer(array $serverData, string $publicKey, string $clientIP): void
+    private static function resolveWireguardProtocolSlug(?string $protocolSlug, array $serverData): string
+    {
+        $s = trim((string) ($protocolSlug ?? ''));
+        if ($s !== '') {
+            return $s;
+        }
+        $s = trim((string) ($serverData['install_protocol'] ?? ''));
+        if ($s !== '') {
+            return $s;
+        }
+        if (trim((string) ($serverData['container_name'] ?? '')) === 'amnezia-awg2') {
+            return 'awg2';
+        }
+        return '';
+    }
+
+    /**
+     * Add client to server using wg/awg set (more reliable than syncconf).
+     * AWG2: must use `awg` + `awg-quick` with WG_QUICK_USERSPACE_IMPLEMENTATION=amneziawg-go (same as install script).
+     */
+    public static function addClientToServer(array $serverData, string $publicKey, string $clientIP, ?string $protocolSlug = null): void
     {
         $containerName = $serverData['container_name'];
         $presharedKey = $serverData['preshared_key'];
@@ -1014,16 +1034,24 @@ class VpnClient
             throw new Exception('Refusing to add client with empty public key');
         }
 
+        $slug = self::resolveWireguardProtocolSlug($protocolSlug, $serverData);
+        $isAwg2 = ($slug === 'awg2');
+        // Inside both amnezia-awg and amnezia-awg2 images the active config path is /opt/amnezia/awg/wg0.conf; interface name wg0.
+        $wgBin = $isAwg2 ? 'awg' : 'wg';
+        $quickUp = $isAwg2
+            ? 'WG_QUICK_USERSPACE_IMPLEMENTATION=amneziawg-go awg-quick up /opt/amnezia/awg/wg0.conf'
+            : 'wg-quick up /opt/amnezia/awg/wg0.conf';
+
         // 1. Create temp file for PSK (to avoid shell escaping issues)
         $pskFile = '/tmp/' . bin2hex(random_bytes(8)) . '.psk';
         $cmd1 = sprintf("docker exec -i %s sh -c 'echo \"%s\" > %s'", $containerName, $presharedKey, $pskFile);
         self::executeServerCommand($serverData, $cmd1, true);
 
-        // 2. Add peer using wg set
-        // wg set wg0 peer <PUBKEY> preshared-key <FILE> allowed-ips <IPS>
+        // 2. Add peer (awg for AmneziaWG-Go / AWG2; wg for kernel / legacy stack)
         $cmd2 = sprintf(
-            "docker exec -i %s wg set wg0 peer %s preshared-key %s allowed-ips %s/32",
+            "docker exec -i %s %s set wg0 peer %s preshared-key %s allowed-ips %s/32",
             $containerName,
+            $wgBin,
             escapeshellarg($publicKey),
             $pskFile,
             $clientIP
@@ -1047,9 +1075,12 @@ class VpnClient
         // 5. Update clientsTable
         self::updateClientsTable($serverData, $publicKey, $clientIP);
 
-        // 6. CRITICAL: Reload WG interface to apply AWG obfuscation params
-        // Without this, the interface uses standard WireGuard without Jc/S1/S2/H1-H4
-        $cmd5 = sprintf("docker exec -i %s sh -c 'ip link del wg0 2>/dev/null || true; wg-quick up /opt/amnezia/awg/wg0.conf 2>&1'", $containerName);
+        // 6. Reload interface so obfuscation params apply (AWG2: amneziawg-go via awg-quick)
+        $cmd5 = sprintf(
+            "docker exec -i %s sh -c 'ip link del wg0 2>/dev/null || true; %s 2>&1'",
+            $containerName,
+            $quickUp
+        );
         self::executeServerCommand($serverData, $cmd5, true);
     }
 
@@ -1225,7 +1256,7 @@ class VpnClient
             $serverData = $server->getData();
             if ($serverData && $serverData['status'] === 'active') {
                 try {
-                    self::removeClientFromServer($serverData, $this->data['public_key']);
+                    self::removeClientFromServer($serverData, $this->data['public_key'], $this->getProtocolSlugForExport());
                 } catch (Exception $e) {
                     error_log('Failed to remove client from server: ' . $e->getMessage());
                 }
@@ -1253,7 +1284,7 @@ class VpnClient
             $serverData = $server->getData();
             if ($serverData && $serverData['status'] === 'active') {
                 try {
-                    self::addClientToServer($serverData, $this->data['public_key'], $this->data['client_ip']);
+                    self::addClientToServer($serverData, $this->data['public_key'], $this->data['client_ip'], $this->getProtocolSlugForExport());
                 } catch (Exception $e) {
                     throw new Exception('Failed to restore client on server: ' . $e->getMessage());
                 }
@@ -1304,14 +1335,18 @@ class VpnClient
     /**
      * Remove client from server WireGuard configuration
      */
-    private static function removeClientFromServer(array $serverData, string $publicKey): void
+    private static function removeClientFromServer(array $serverData, string $publicKey, ?string $protocolSlug = null): void
     {
         $containerName = $serverData['container_name'];
+        $slug = self::resolveWireguardProtocolSlug($protocolSlug, $serverData);
+        $isAwg2 = ($slug === 'awg2');
+        $wgBin = $isAwg2 ? 'awg' : 'wg';
 
-        // First, remove using wg command (live removal)
+        // First, remove using wg/awg command (live removal)
         $removeCmd = sprintf(
-            "docker exec -i %s wg set wg0 peer %s remove",
+            "docker exec -i %s %s set wg0 peer %s remove",
             $containerName,
+            $wgBin,
             escapeshellarg($publicKey)
         );
 
@@ -1336,7 +1371,11 @@ class VpnClient
         self::executeServerCommand($serverData, $writeCmd, true);
 
         // Save config
-        $saveCmd = sprintf("docker exec -i %s wg-quick save wg0", $containerName);
+        $saveCmd = sprintf(
+            "docker exec -i %s sh -c %s",
+            $containerName,
+            escapeshellarg($isAwg2 ? 'awg-quick save wg0' : 'wg-quick save wg0')
+        );
         self::executeServerCommand($serverData, $saveCmd, true);
 
         // Remove from clientsTable

@@ -1663,8 +1663,12 @@ class VpnClient
                 $parsed = parse_url($config);
                 $host = $parsed['host'] ?? '';
                 $port = (int) ($parsed['port'] ?? 443);
-                $clientId = ltrim($parsed['path'] ?? '', '/');
-                $fragment = isset($parsed['fragment']) ? urldecode($parsed['fragment']) : '';
+                // Standard vless:// is vless://uuid@host:port — UUID is in "user", not "path" (must match generateQRCode)
+                $clientId = (string) ($parsed['user'] ?? '');
+                if ($clientId === '') {
+                    $clientId = ltrim((string) ($parsed['path'] ?? ''), '/');
+                }
+                $fragment = isset($parsed['fragment']) ? (string) $parsed['fragment'] : '';
                 parse_str($parsed['query'] ?? '', $query);
                 $flow = $query['flow'] ?? '';
                 $reality = null;

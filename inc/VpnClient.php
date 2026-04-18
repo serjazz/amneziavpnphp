@@ -1036,8 +1036,9 @@ class VpnClient
 
         $slug = self::resolveWireguardProtocolSlug($protocolSlug, $serverData);
         $isAwg2 = ($slug === 'awg2');
-        // Inside both amnezia-awg and amnezia-awg2 images the active config path is /opt/amnezia/awg/wg0.conf; interface name wg0.
+        // Config file path is still wg0.conf under /opt/amnezia/awg/, but AWG2 + amneziawg-go exposes interface awg0 (not wg0).
         $wgBin = $isAwg2 ? 'awg' : 'wg';
+        $iface = $isAwg2 ? 'awg0' : 'wg0';
         $quickUp = $isAwg2
             ? 'WG_QUICK_USERSPACE_IMPLEMENTATION=amneziawg-go awg-quick up /opt/amnezia/awg/wg0.conf'
             : 'wg-quick up /opt/amnezia/awg/wg0.conf';
@@ -1047,11 +1048,12 @@ class VpnClient
         $cmd1 = sprintf("docker exec -i %s sh -c 'echo \"%s\" > %s'", $containerName, $presharedKey, $pskFile);
         self::executeServerCommand($serverData, $cmd1, true);
 
-        // 2. Add peer (awg for AmneziaWG-Go / AWG2; wg for kernel / legacy stack)
+        // 2. Add peer — interface must be awg0 on AWG2 (see: awg show vs awg show wg0 "Protocol not supported")
         $cmd2 = sprintf(
-            "docker exec -i %s %s set wg0 peer %s preshared-key %s allowed-ips %s/32",
+            "docker exec -i %s %s set %s peer %s preshared-key %s allowed-ips %s/32",
             $containerName,
             $wgBin,
+            $iface,
             escapeshellarg($publicKey),
             $pskFile,
             $clientIP
@@ -1075,10 +1077,11 @@ class VpnClient
         // 5. Update clientsTable
         self::updateClientsTable($serverData, $publicKey, $clientIP);
 
-        // 6. Reload interface so obfuscation params apply (AWG2: amneziawg-go via awg-quick)
+        // 6. Reload interface so obfuscation params apply (AWG2: tear down awg0, not wg0)
         $cmd5 = sprintf(
-            "docker exec -i %s sh -c 'ip link del wg0 2>/dev/null || true; %s 2>&1'",
+            "docker exec -i %s sh -c 'ip link del %s 2>/dev/null || true; %s 2>&1'",
             $containerName,
+            $iface,
             $quickUp
         );
         self::executeServerCommand($serverData, $cmd5, true);
@@ -1341,12 +1344,14 @@ class VpnClient
         $slug = self::resolveWireguardProtocolSlug($protocolSlug, $serverData);
         $isAwg2 = ($slug === 'awg2');
         $wgBin = $isAwg2 ? 'awg' : 'wg';
+        $iface = $isAwg2 ? 'awg0' : 'wg0';
 
         // First, remove using wg/awg command (live removal)
         $removeCmd = sprintf(
-            "docker exec -i %s %s set wg0 peer %s remove",
+            "docker exec -i %s %s set %s peer %s remove",
             $containerName,
             $wgBin,
+            $iface,
             escapeshellarg($publicKey)
         );
 
@@ -1370,11 +1375,11 @@ class VpnClient
 
         self::executeServerCommand($serverData, $writeCmd, true);
 
-        // Save config
+        // Save config (interface name for awg-quick save matches awg show)
         $saveCmd = sprintf(
             "docker exec -i %s sh -c %s",
             $containerName,
-            escapeshellarg($isAwg2 ? 'awg-quick save wg0' : 'wg-quick save wg0')
+            escapeshellarg($isAwg2 ? 'awg-quick save awg0' : 'wg-quick save wg0')
         );
         self::executeServerCommand($serverData, $saveCmd, true);
 

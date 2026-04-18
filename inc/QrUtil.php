@@ -352,6 +352,10 @@ class QrUtil
             }
         }
 
+        // Amnezia Client (dev): DockerContainer::Awg2 + protocol_version "2" → AmneziaWG v2 UI and amneziawg-go stack.
+        $slug = $protocolSlug ?? '';
+        $isAwg2 = ($slug === 'awg2');
+
         // Build last_config JSON object (stringified, pretty-printed)
         $lastConfigObj = [
             'H1' => (string) ($params['H1'] ?? ''),
@@ -378,35 +382,42 @@ class QrUtil
             'psk_key' => (string) ($psk ?? ''),
             'server_pub_key' => (string) ($pubKeyServer ?? ''),
         ];
+        if ($isAwg2) {
+            $lastConfigObj['protocol_version'] = '2';
+        }
 
         $serverDesc = self::resolveServerDescription($endpointHost);
 
         // Amnezia Client maps DockerContainer::… to "amnezia-<name>". AWG2 stack (amnezia-awg2 container on server)
         // must use amnezia-awg2 here; amnezia-awg targets the older AmneziaWG path and can fail to connect.
-        $slug = $protocolSlug ?? '';
-        $clientContainer = ($slug === 'awg2') ? 'amnezia-awg2' : 'amnezia-awg';
+        $clientContainer = $isAwg2 ? 'amnezia-awg2' : 'amnezia-awg';
+
+        $awgBlock = [
+            'H1' => (string) ($params['H1'] ?? ''),
+            'H2' => (string) ($params['H2'] ?? ''),
+            'H3' => (string) ($params['H3'] ?? ''),
+            'H4' => (string) ($params['H4'] ?? ''),
+            'Jc' => (string) ($params['Jc'] ?? ''),
+            'Jmax' => (string) ($params['Jmax'] ?? ''),
+            'Jmin' => (string) ($params['Jmin'] ?? ''),
+            'S1' => (string) ($params['S1'] ?? ''),
+            'S2' => (string) ($params['S2'] ?? ''),
+            'S3' => (string) ($params['S3'] ?? ''),
+            'S4' => (string) ($params['S4'] ?? ''),
+            'last_config' => json_encode($lastConfigObj, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT),
+            'port' => (string) $endpointPort,
+            'transport_proto' => 'udp',
+        ];
+        if ($isAwg2) {
+            $awgBlock['protocol_version'] = '2';
+        }
 
         // Envelope with keys ordered like variant 1: containers first
         $envelope = [
             'containers' => [
                 [
                     // Proto key stays "awg" (Amnezia Proto::Awg); container id selects AWG vs AWG2 install.
-                    'awg' => [
-                        'H1' => (string) ($params['H1'] ?? ''),
-                        'H2' => (string) ($params['H2'] ?? ''),
-                        'H3' => (string) ($params['H3'] ?? ''),
-                        'H4' => (string) ($params['H4'] ?? ''),
-                        'Jc' => (string) ($params['Jc'] ?? ''),
-                        'Jmax' => (string) ($params['Jmax'] ?? ''),
-                        'Jmin' => (string) ($params['Jmin'] ?? ''),
-                        'S1' => (string) ($params['S1'] ?? ''),
-                        'S2' => (string) ($params['S2'] ?? ''),
-                        'S3' => (string) ($params['S3'] ?? ''),
-                        'S4' => (string) ($params['S4'] ?? ''),
-                        'last_config' => json_encode($lastConfigObj, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT),
-                        'port' => (string) $endpointPort,
-                        'transport_proto' => 'udp',
-                    ],
+                    'awg' => $awgBlock,
                     'container' => $clientContainer,
                 ],
             ],

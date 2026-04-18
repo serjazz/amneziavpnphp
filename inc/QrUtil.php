@@ -186,6 +186,8 @@ class QrUtil
             'Jmax' => null,
             'S1' => null,
             'S2' => null,
+            'S3' => null,
+            'S4' => null,
         ];
         foreach (explode("\n", $conf) as $line) {
             $line = trim($line);
@@ -208,6 +210,8 @@ class QrUtil
             'Jmin' => (string) ($params['Jmin'] ?? ''),
             'S1' => (string) ($params['S1'] ?? ''),
             'S2' => (string) ($params['S2'] ?? ''),
+            'S3' => (string) ($params['S3'] ?? ''),
+            'S4' => (string) ($params['S4'] ?? ''),
             'allowed_ips' => $allowedIps ?: ['0.0.0.0/0', '::/0'],
             'clientId' => $clientPubKey ?: '',
             'client_ip' => preg_replace('/\/(\d{1,2})$/', '', (string) ($address ?? '')),
@@ -332,6 +336,8 @@ class QrUtil
             'Jmax' => null,
             'S1' => null,
             'S2' => null,
+            'S3' => null,
+            'S4' => null,
         ];
         foreach (explode("\n", $conf) as $line) {
             $line = trim($line);
@@ -354,6 +360,8 @@ class QrUtil
             'Jmin' => (string) ($params['Jmin'] ?? ''),
             'S1' => (string) ($params['S1'] ?? ''),
             'S2' => (string) ($params['S2'] ?? ''),
+            'S3' => (string) ($params['S3'] ?? ''),
+            'S4' => (string) ($params['S4'] ?? ''),
             'allowed_ips' => $allowedIps ?: ['0.0.0.0/0', '::/0'],
             'clientId' => $clientPubKey ?: '',
             'client_ip' => preg_replace('/\/(\d{1,2})$/', '', (string) ($address ?? '')),
@@ -385,6 +393,8 @@ class QrUtil
                         'Jmin' => (string) ($params['Jmin'] ?? ''),
                         'S1' => (string) ($params['S1'] ?? ''),
                         'S2' => (string) ($params['S2'] ?? ''),
+                        'S3' => (string) ($params['S3'] ?? ''),
+                        'S4' => (string) ($params['S4'] ?? ''),
                         'last_config' => json_encode($lastConfigObj, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT),
                         'port' => (string) $endpointPort,
                         'transport_proto' => 'udp',

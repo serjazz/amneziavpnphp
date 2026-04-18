@@ -1685,7 +1685,9 @@ class VpnClient
                 $payload = QrUtil::encodeOldPayloadFromConf($config);
             }
 
-            return 'vpn://' . $payload;
+            // Same string as encoded inside QR (pngBase64). Do NOT prefix with vpn:// — many clients parse
+            // paste as URI and break on //; scanning QR uses raw payload only.
+            return $payload;
         } catch (Throwable $e) {
             error_log('Failed to generate Amnezia link: ' . $e->getMessage());
             return '';

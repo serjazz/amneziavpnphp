@@ -1685,8 +1685,7 @@ class VpnClient
                 $payload = QrUtil::encodeOldPayloadFromConf($config);
             }
 
-            // Paste / "Add connection → Paste key" expects a vpn:// URI. QR still encodes the raw payload
-            // (no scheme) — the app treats camera and clipboard differently.
+            // Paste expects vpn:// + same base64url payload as in QR (Qt qCompress format).
             return 'vpn://' . $payload;
         } catch (Throwable $e) {
             error_log('Failed to generate Amnezia link: ' . $e->getMessage());

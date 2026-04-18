@@ -63,14 +63,14 @@ class QrUtil
     public static function encodeOldPayloadFromJson(string $jsonText): string
     {
         $json = self::normalizeJson($jsonText);
-        $compressed = gzcompress($json, 9);
+        // Amnezia Client import (paste + single QR): QByteArray::qCompress(json, 8) — see
+        // amnezia-client importController.cpp extractAmneziaConfig / exportController.cpp
+        $compressed = gzcompress($json, 8);
         if ($compressed === false) {
             throw new RuntimeException('gzcompress failed');
         }
         $uncompressedLen = strlen($json);
-        $compressedLen = strlen($compressed) + 4; // +4 for the uncompressed length field
-        $version = 0x07C00100; // Amnezia magic version number
-        $header = pack('N3', $version, $compressedLen, $uncompressedLen);
+        $header = pack('N', $uncompressedLen);
         return self::urlsafe_b64_encode($header . $compressed);
     }
 

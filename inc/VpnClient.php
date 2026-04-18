@@ -1039,9 +1039,8 @@ class VpnClient
         // Config file path is still wg0.conf under /opt/amnezia/awg/, but AWG2 + amneziawg-go exposes interface awg0 (not wg0).
         $wgBin = $isAwg2 ? 'awg' : 'wg';
         $iface = $isAwg2 ? 'awg0' : 'wg0';
-        $quickUp = $isAwg2
-            ? 'WG_QUICK_USERSPACE_IMPLEMENTATION=amneziawg-go awg-quick up /opt/amnezia/awg/wg0.conf'
-            : 'wg-quick up /opt/amnezia/awg/wg0.conf';
+        // Full reload only for legacy AWG (kernel); see step 6.
+        $quickUpLegacy = 'wg-quick up /opt/amnezia/awg/wg0.conf';
 
         // 1. Create temp file for PSK (to avoid shell escaping issues)
         $pskFile = '/tmp/' . bin2hex(random_bytes(8)) . '.psk';
@@ -1077,14 +1076,18 @@ class VpnClient
         // 5. Update clientsTable
         self::updateClientsTable($serverData, $publicKey, $clientIP);
 
-        // 6. Reload interface so obfuscation params apply (AWG2: tear down awg0, not wg0)
-        $cmd5 = sprintf(
-            "docker exec -i %s sh -c 'ip link del %s 2>/dev/null || true; %s 2>&1'",
-            $containerName,
-            $iface,
-            $quickUp
-        );
-        self::executeServerCommand($serverData, $cmd5, true);
+        // 6. Legacy AWG only: reload interface so obfuscation params apply.
+        // AWG2: do NOT run ip link del awg0 + awg-quick up here — `awg set awg0 peer` already updates the live
+        // amneziawg-go process; a full teardown/restart disconnects every peer and can leave awg0 down if up fails.
+        if (!$isAwg2) {
+            $cmd5 = sprintf(
+                "docker exec -i %s sh -c 'ip link del %s 2>/dev/null || true; %s 2>&1'",
+                $containerName,
+                $iface,
+                $quickUpLegacy
+            );
+            self::executeServerCommand($serverData, $cmd5, true);
+        }
     }
 
     /**

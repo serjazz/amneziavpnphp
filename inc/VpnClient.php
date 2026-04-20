@@ -1073,6 +1073,18 @@ class VpnClient
         $cmd4 = sprintf("docker exec -i %s sh -c 'echo \"%s\" >> /opt/amnezia/awg/wg0.conf'", $containerName, $escapedBlock);
         self::executeServerCommand($serverData, $cmd4, true);
 
+        // AWG2 runs interface awg0; peers must also persist in awg0.conf — otherwise after container restart only
+        // wg0.conf has all [Peer] lines but awg0.conf stays stale (e.g. 3 peers on disk vs 6 in wg0.conf).
+        if ($isAwg2) {
+            $cmd4awg0 = sprintf(
+                "docker exec -i %s sh -c 'if [ -f /opt/amnezia/awg/awg0.conf ]; then echo \"%s\" >> /opt/amnezia/awg/awg0.conf; elif [ -f /opt/amnezia/awg2/awg0.conf ]; then echo \"%s\" >> /opt/amnezia/awg2/awg0.conf; fi'",
+                $containerName,
+                $escapedBlock,
+                $escapedBlock
+            );
+            self::executeServerCommand($serverData, $cmd4awg0, true);
+        }
+
         // 5. Update clientsTable
         self::updateClientsTable($serverData, $publicKey, $clientIP);
 
@@ -1377,6 +1389,37 @@ class VpnClient
         );
 
         self::executeServerCommand($serverData, $writeCmd, true);
+
+        // AWG2: remove matching [Peer] from awg0.conf as well (symmetric with addClientToServer).
+        // Relying only on awg-quick save left awg0.conf stale compared to wg0.conf on some setups.
+        if ($isAwg2) {
+            foreach (['/opt/amnezia/awg/awg0.conf', '/opt/amnezia/awg2/awg0.conf'] as $awg0Path) {
+                $readAwg = sprintf(
+                    'docker exec -i %s cat %s 2>/dev/null',
+                    $containerName,
+                    escapeshellarg($awg0Path)
+                );
+                $awg0Conf = self::executeServerCommand($serverData, $readAwg, true);
+                if (!is_string($awg0Conf) || trim($awg0Conf) === '') {
+                    continue;
+                }
+                if (stripos($awg0Conf, 'Error response from daemon') !== false) {
+                    continue;
+                }
+                $newAwg0 = self::removePeerFromConfig($awg0Conf, $publicKey);
+                if ($newAwg0 === $awg0Conf) {
+                    continue;
+                }
+                $escapedAwg0 = str_replace("'", "'\\''", $newAwg0);
+                $writeAwg = sprintf(
+                    "docker exec -i %s sh -c 'echo '\''%s'\'' > %s'",
+                    $containerName,
+                    $escapedAwg0,
+                    escapeshellarg($awg0Path)
+                );
+                self::executeServerCommand($serverData, $writeAwg, true);
+            }
+        }
 
         // Save config (interface name for awg-quick save matches awg show)
         $saveCmd = sprintf(

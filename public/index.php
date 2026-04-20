@@ -1600,6 +1600,40 @@ Router::post('/clients/{id}/sync-stats', function ($params) {
     }
 });
 
+// Update client display name (session UI)
+Router::post('/clients/{id}/update-display-name', function ($params) {
+    requireAuth();
+    $clientId = (int) $params['id'];
+    header('Content-Type: application/json');
+
+    $raw = file_get_contents('php://input');
+    $decoded = json_decode($raw ?? '', true);
+    $data = is_array($decoded) ? $decoded : [];
+    $displayName = isset($data['display_name']) ? trim((string) $data['display_name']) : '';
+
+    try {
+        $client = new VpnClient($clientId);
+        $clientData = $client->getData();
+
+        $user = Auth::user();
+        if ($clientData['user_id'] != $user['id'] && !Auth::isAdmin()) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden']);
+            return;
+        }
+
+        VpnClient::setDisplayName($clientId, $displayName);
+
+        echo json_encode([
+            'success' => true,
+            'display_name' => $displayName === '' ? null : $displayName,
+        ]);
+    } catch (Exception $e) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
 // Sync all stats for server
 Router::post('/servers/{id}/sync-stats', function ($params) {
     requireAuth();
@@ -2135,6 +2169,7 @@ Router::get('/api/clients/{id}/details', function ($params) {
             'client' => [
                 'id' => $clientData['id'],
                 'name' => $clientData['name'],
+                'display_name' => $clientData['display_name'] ?? null,
                 'server_id' => $clientData['server_id'],
                 'client_ip' => $clientData['client_ip'],
                 'status' => $clientData['status'],
@@ -3347,6 +3382,7 @@ Router::post('/api/clients/create', function () {
             'client' => [
                 'id' => $clientData['id'],
                 'name' => $clientData['name'],
+                'display_name' => $clientData['display_name'] ?? null,
                 'server_id' => $clientData['server_id'],
                 'client_ip' => $clientData['client_ip'],
                 'status' => $clientData['status'],
@@ -3567,6 +3603,42 @@ Router::post('/api/clients/{id}/set-traffic-limit', function ($params) {
     } catch (Exception $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+// Set optional display name (API / JWT)
+Router::post('/api/clients/{id}/set-display-name', function ($params) {
+    header('Content-Type: application/json');
+
+    $user = JWT::requireAuth();
+    if (!$user) {
+        return;
+    }
+
+    $clientId = (int) $params['id'];
+    $raw = file_get_contents('php://input');
+    $data = json_decode($raw, true) ?: [];
+    $displayName = isset($data['display_name']) ? trim((string) $data['display_name']) : '';
+
+    try {
+        $client = new VpnClient($clientId);
+        $clientData = $client->getData();
+
+        if ($clientData['user_id'] != $user['id'] && ($user['role'] ?? '') !== 'admin') {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden']);
+            return;
+        }
+
+        VpnClient::setDisplayName($clientId, $displayName);
+
+        echo json_encode([
+            'success' => true,
+            'display_name' => $displayName === '' ? null : $displayName,
+        ]);
+    } catch (Exception $e) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
 });
 

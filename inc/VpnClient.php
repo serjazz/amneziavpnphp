@@ -1083,6 +1083,15 @@ class VpnClient
                 $escapedBlock
             );
             self::executeServerCommand($serverData, $cmd4awg0, true);
+
+            // Persist live awg0 state to disk so it survives `docker restart` — must match what the
+            // container runs on boot (see same call after revoke). Appends alone can drift from kernel.
+            $saveAfterAdd = sprintf(
+                "docker exec -i %s sh -c %s",
+                $containerName,
+                escapeshellarg('awg-quick save awg0 2>&1')
+            );
+            self::executeServerCommand($serverData, $saveAfterAdd, true);
         }
 
         // 5. Update clientsTable
@@ -2449,6 +2458,24 @@ class VpnClient
      * @param int|null $limitBytes Traffic limit in bytes (NULL = unlimited)
      * @return bool Success
      */
+    /**
+     * Optional human-readable label in the panel; technical id stays in column `name` (e.g. tg_…).
+     *
+     * @param int    $clientId
+     * @param string|null $displayName Empty string or null clears the label
+     */
+    public static function setDisplayName(int $clientId, ?string $displayName): void
+    {
+        $displayName = $displayName !== null ? trim($displayName) : '';
+        $len = function_exists('mb_strlen') ? mb_strlen($displayName, 'UTF-8') : strlen($displayName);
+        if ($len > 255) {
+            throw new Exception('display_name exceeds 255 characters');
+        }
+        $pdo = DB::conn();
+        $stmt = $pdo->prepare('UPDATE vpn_clients SET display_name = ? WHERE id = ?');
+        $stmt->execute([$displayName === '' ? null : $displayName, $clientId]);
+    }
+
     public function setTrafficLimit(?int $limitBytes): bool
     {
         if (!$this->data) {

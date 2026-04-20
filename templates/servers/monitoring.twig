@@ -375,7 +375,7 @@ async function updateClientSpeeds() {
                     const client = {{ clients|json_encode|raw }}.find(c => c.id === clientId);
                     
                     clientsData.push({
-                        name: client.name,
+                        name: (client.display_name && String(client.display_name).trim()) ? client.display_name : client.name,
                         speedUp: parseFloat(latest.speed_up_kbps),
                         speedDown: parseFloat(latest.speed_down_kbps)
                     });

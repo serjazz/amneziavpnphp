@@ -1,12 +1,30 @@
 {% extends "layout.twig" %}
-{% block title %}{{ client.name }}{% endblock %}
+{% block title %}{% if client.display_name %}{{ client.display_name }}{% else %}{{ client.name }}{% endif %}{% endblock %}
 {% block content %}
 <div class="max-w-4xl mx-auto px-4 py-8">
-  <h1 class="text-3xl font-bold mb-6">{{ client.name }}</h1>
-  
+  <h1 class="text-3xl font-bold mb-1">{% if client.display_name %}{{ client.display_name }}{% else %}{{ client.name }}{% endif %}</h1>
+  {% if client.display_name %}
+  <p class="text-gray-600 text-sm font-mono mb-6">{{ client.name }}</p>
+  {% else %}
+  <div class="mb-6"></div>
+  {% endif %}
+
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
     <div class="bg-white rounded shadow p-6">
       <h3 class="font-bold mb-4">{{ t('clients.configuration') }}</h3>
+      <form onsubmit="updateDisplayName(event, {{ client.id }})" class="space-y-2 mb-4 pb-4 border-b border-gray-100">
+        <label class="block text-sm text-gray-600" for="displayNameInput">{{ t('clients.display_name') }}</label>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input type="text" id="displayNameInput" name="display_name" maxlength="255"
+            value="{{ client.display_name|default('')|e('html_attr') }}"
+            class="flex-1 px-3 py-2 border rounded"
+            autocomplete="off">
+          <button type="submit" class="gradient-bg text-white px-4 py-2 rounded whitespace-nowrap">
+            <i class="fas fa-save"></i> {{ t('form.update') }}
+          </button>
+        </div>
+        <p class="text-xs text-gray-500">{{ t('clients.display_name_hint') }}</p>
+      </form>
       <dl class="space-y-2 mb-4">
         <div><dt class="text-sm text-gray-600">{{ t('common.ip_address') }}</dt><dd>{{ client.client_ip }}</dd></div>
         <div><dt class="text-sm text-gray-600">{{ t('common.status') }}</dt>
@@ -18,7 +36,7 @@
             {% endif %}
           </dd>
         </div>
-        <div><dt class="text-sm text-gray-600">Логин</dt><dd>{{ client.name|default('') }}</dd></div>
+        <div><dt class="text-sm text-gray-600">{{ t('clients.technical_login') }}</dt><dd class="font-mono text-sm">{{ client.name|default('') }}</dd></div>
         <div><dt class="text-sm text-gray-600">{{ t('common.created') }}</dt><dd>{{ client.created_at }}</dd></div>
       </dl>
       <div class="flex gap-2">
@@ -355,6 +373,31 @@ async function updateTrafficLimit(event, clientId) {
     if (data.success !== false) {
       alert('Traffic limit updated successfully');
       // Reload page to show updated traffic info
+      window.location.reload();
+    } else {
+      alert('Error: ' + (data.error || 'Unknown error'));
+    }
+  } catch (error) {
+    alert('Error: ' + error.message);
+  }
+}
+
+async function updateDisplayName(event, clientId) {
+  event.preventDefault();
+  const input = document.getElementById('displayNameInput');
+  const displayName = input ? String(input.value || '').trim() : '';
+
+  try {
+    const response = await fetch('/clients/' + clientId + '/update-display-name', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ display_name: displayName })
+    });
+    const data = await response.json();
+
+    if (data.success !== false && !data.error) {
+      alert({{ t('clients.display_name_saved')|json_encode|raw }});
       window.location.reload();
     } else {
       alert('Error: ' + (data.error || 'Unknown error'));

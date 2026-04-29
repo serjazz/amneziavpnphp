@@ -30,6 +30,7 @@ require_once __DIR__ . '/../inc/BackupLibrary.php';
 require_once __DIR__ . '/../inc/InstallProtocolManager.php';
 require_once __DIR__ . '/../inc/ProtocolService.php';
 require_once __DIR__ . '/../inc/OpenRouterService.php';
+require_once __DIR__ . '/../inc/TrialService.php';
 
 // Load environment configuration
 Config::load(__DIR__ . '/../.env');
@@ -1658,6 +1659,62 @@ Router::post('/servers/{id}/sync-stats', function ($params) {
     } catch (Exception $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+/**
+ * PUBLIC TRIAL API (landing integration)
+ */
+Router::add('OPTIONS', '/api/trial/request', function () {
+    header('Content-Type: application/json');
+    TrialService::sendCorsHeaders();
+    http_response_code(204);
+});
+
+Router::post('/api/trial/request', function () {
+    header('Content-Type: application/json');
+    TrialService::sendCorsHeaders();
+
+    try {
+        if (!TrialService::isOriginAllowed()) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'error' => 'origin_not_allowed']);
+            return;
+        }
+
+        if (!TrialService::isEnabled()) {
+            http_response_code(503);
+            echo json_encode(['success' => false, 'error' => 'trial_disabled']);
+            return;
+        }
+
+        $raw = file_get_contents('php://input');
+        $decoded = json_decode($raw ?: '', true);
+        $data = is_array($decoded) ? $decoded : [];
+        $captchaToken = trim((string) ($data['captcha_token'] ?? ''));
+
+        $ip = TrialService::getClientIp();
+        $ua = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
+
+        if (!TrialService::verifyCaptcha($captchaToken, $ip)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'captcha_failed']);
+            return;
+        }
+
+        $trial = TrialService::issueTrial($ip, $ua);
+        echo json_encode([
+            'success' => true,
+            'trial' => $trial,
+        ], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+    } catch (Exception $e) {
+        $error = $e->getMessage();
+        $status = ($error === 'trial_limit_reached') ? 429 : 400;
+        http_response_code($status);
+        echo json_encode(['success' => false, 'error' => $error]);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'internal_error']);
     }
 });
 

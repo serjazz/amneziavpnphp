@@ -34,7 +34,8 @@ test_qr.svg
 
 # Telegram bot (separate git repo)
 telegram-bot/
-
+landing/
+.cursor/
 # Local tooling / scratch
 .trae/
 scripts/_cycle_out/
